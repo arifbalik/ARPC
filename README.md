@@ -1,5 +1,5 @@
 # ARPC
-ARPC is a fast, very simple, and easy-to-use RPC implementation in C. It is intended to use in small embedded systems.
+ARPC is a fast, very simple, and easy-to-use RPC implementation in C. It is intended to be used in small embedded systems.
 
 ## How Does It Work?
 
