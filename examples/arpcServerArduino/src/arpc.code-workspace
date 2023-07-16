@@ -1,0 +1,16 @@
+{
+	"folders": [
+		{
+			"path": "../.."
+		},
+		{
+			"name": "arpcServerArduino",
+			"path": ".."
+		},
+		{
+			"name": "arpcClientArduino",
+			"path": "../../arpcClientArduino"
+		}
+	],
+	"settings": {}
+}
