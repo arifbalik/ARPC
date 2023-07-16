@@ -247,6 +247,8 @@ class ArpcGenerator:
 
         self.copyFilesToGeneratedFolders()
 
+        print("Looking for ARPC defines...")
+
         self.findConstants()
 
         self.createArpcFunctions()

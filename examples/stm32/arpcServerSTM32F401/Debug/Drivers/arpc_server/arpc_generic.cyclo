@@ -1,0 +1,6 @@
+../Drivers/arpc_server/arpc_generic.c:3:16:checkBuffer	4
+../Drivers/arpc_server/arpc_generic.c:23:13:resetBuffer	1
+../Drivers/arpc_server/arpc_generic.c:28:17:calculateCRC	1
+../Drivers/arpc_server/arpc_generic.c:34:16:checkCRC	1
+../Drivers/arpc_server/arpc_generic.c:39:13:arpcEncodeGeneric	2
+../Drivers/arpc_server/arpc_generic.c:61:13:arpcSendFrame	3

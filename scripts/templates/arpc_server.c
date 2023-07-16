@@ -40,7 +40,7 @@ void processBuffer() {
 
   arpcReceiveFrame(&callFrame, buffer);
 
-  if (checkCRC(&callFrame))
+  if (!checkCRC(&callFrame))
     goto reset;
 
   arpcFrameHandler[callFrame.functionId](&callFrame, &responseFrame);

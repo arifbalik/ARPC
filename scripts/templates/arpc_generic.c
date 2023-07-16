@@ -1,13 +1,13 @@
-#include "arpc.h"
+#include "arpc_generic.h"
 
 inline uint8_t checkBuffer(uint8_t *buffer, uint32_t bufferIndex) {
-  const uint8_t receivedBytes = bufferIndex - 1;
+  const uint8_t receivedBytes = bufferIndex;
 
   if (receivedBytes < MIN_MESSAGE_BLOCK_LENGTH) {
     return 0;
   }
 
-#define LAST_BYTE (buffer[receivedBytes])
+#define LAST_BYTE (buffer[receivedBytes - 1])
   if (LAST_BYTE != SYNC_BYTE) {
     return 0;
   }

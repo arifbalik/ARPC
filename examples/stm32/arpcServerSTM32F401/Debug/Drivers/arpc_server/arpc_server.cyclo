@@ -1,0 +1,5 @@
+../Drivers/arpc_server/arpc_server.c:11:13:arpcReceiveFrame	2
+../Drivers/arpc_server/arpc_server.c:35:6:processBuffer	3
+../Drivers/arpc_server/arpc_server.c:58:6:arpcByteReceived	3
+../Drivers/arpc_server/arpc_server.c:73:6:HAL_Delay_generateResponseFrame	1
+../Drivers/arpc_server/arpc_server.c:85:6:setLED_generateResponseFrame	1

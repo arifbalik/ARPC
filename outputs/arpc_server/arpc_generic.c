@@ -1,4 +1,4 @@
-#include "arpc.h"
+#include "arpc_generic.h"
 
 inline uint8_t checkBuffer(uint8_t *buffer, uint32_t bufferIndex) {
   const uint8_t receivedBytes = bufferIndex - 1;
