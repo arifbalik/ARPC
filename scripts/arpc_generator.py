@@ -44,10 +44,9 @@ class ArpcFunction:
             return False
         return True
     
-    def checkParameters(self):
-        for paramType, _ in self.parameters:
-            if paramType not in self.acceptedTypes:
-                return False
+    def checkParameter(self, parameterType):
+        if parameterType not in self.acceptedTypes:
+            return False
         return True
 
 
@@ -81,15 +80,16 @@ class ArpcFunction:
         # Check if there are no parameters
         if parameterSection.strip() != "":
             # Split the parameter section by commas
-            parameters = parameterSection.split(',')
+            parametersRaw = parameterSection.split(',')
 
             # Extract the parameter types and names
-            for parameter in parameters:
+            for parameter in parametersRaw:
                 parameter = parameter.strip()
                 parameterParts = parameter.split()
                 parameterType = ' '.join(parameterParts[:-1])
                 parameterName = parameterParts[-1]
-                if not self.checkParameters():
+                print("parameter type: " + parameterType)
+                if not self.checkParameter(parameterType):
                     raise Exception(f"Invalid parameter type: {parameterType}")
                 else:
                     self.parameters.append((parameterType, parameterName))
