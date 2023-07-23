@@ -22,7 +22,7 @@ inline void arpcReceiveFrame(arpcDataFrame_t *responseFrame, uint8_t *buffer) {
 #define OFFSET_BYTE 2
   memcpy(responseFrame->parameters, buffer + OFFSET_BYTE, parameterByteCount);
 
-//#define COPY_ALL
+#define COPY_ALL
 
 /* not neccesary to copy */
 #ifdef COPY_ALL
@@ -52,7 +52,8 @@ reset:
 }
 
 void arpcByteReceived(uint8_t byte) {
-  buffer[bufferIndex++] = byte;
+  buffer[bufferIndex] = byte;
+  bufferIndex++;
 
 #define FRAME_LENGTH (buffer[0])
   if (bufferIndex >= FRAME_LENGTH)

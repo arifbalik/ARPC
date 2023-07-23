@@ -22,7 +22,7 @@ inline uint8_t checkBuffer(uint8_t *buffer, uint32_t bufferIndex) {
 
 inline void resetBuffer(uint8_t *buffer, uint32_t *bufferIndex) {
   memset(buffer, 0, MAX_MESSAGE_BLOCK_LENGTH);
-  bufferIndex = 0;
+  *bufferIndex = 0;
 }
 
 inline uint16_t calculateCRC(arpcDataFrame_t *frame) {
@@ -33,7 +33,7 @@ inline uint16_t calculateCRC(arpcDataFrame_t *frame) {
 
 inline uint8_t checkCRC(arpcDataFrame_t *frame) {
   const uint16_t calculatedCRC = calculateCRC(frame);
-  return frame->crc != calculatedCRC;
+  return frame->crc == calculatedCRC;
 }
 
 inline void arpcEncodeGeneric(arpcDataFrame_t *frame, uint8_t functionId,
