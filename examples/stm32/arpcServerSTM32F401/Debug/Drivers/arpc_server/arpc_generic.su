@@ -1,6 +1,0 @@
-../Drivers/arpc_server/arpc_generic.c:3:16:checkBuffer	24	static
-../Drivers/arpc_server/arpc_generic.c:23:13:resetBuffer	16	static
-../Drivers/arpc_server/arpc_generic.c:28:17:calculateCRC	24	static
-../Drivers/arpc_server/arpc_generic.c:34:16:checkCRC	24	static
-../Drivers/arpc_server/arpc_generic.c:39:13:arpcEncodeGeneric	288	static
-../Drivers/arpc_server/arpc_generic.c:61:13:arpcSendFrame	24	static

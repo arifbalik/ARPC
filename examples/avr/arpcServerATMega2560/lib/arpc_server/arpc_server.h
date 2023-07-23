@@ -9,8 +9,13 @@ extern "C" {
 
 void arpcByteReceived(uint8_t byte);
 
+#ifndef RPC
 #define RPC extern "C"
+#endif
+
+#ifndef ARPC_CONSTANT
 #define ARPC_CONSTANT(x, y)
+#endif
 
 #ifdef __cplusplus
 }

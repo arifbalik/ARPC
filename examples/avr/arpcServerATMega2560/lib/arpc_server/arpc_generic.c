@@ -1,13 +1,13 @@
-#include "arpc.h"
+#include "arpc_generic.h"
 
 inline uint8_t checkBuffer(uint8_t *buffer, uint32_t bufferIndex) {
-  const uint8_t receivedBytes = bufferIndex - 1;
+  const uint8_t receivedBytes = bufferIndex;
 
   if (receivedBytes < MIN_MESSAGE_BLOCK_LENGTH) {
     return 0;
   }
 
-#define LAST_BYTE (buffer[receivedBytes])
+#define LAST_BYTE (buffer[receivedBytes - 1])
   if (LAST_BYTE != SYNC_BYTE) {
     return 0;
   }
@@ -22,7 +22,7 @@ inline uint8_t checkBuffer(uint8_t *buffer, uint32_t bufferIndex) {
 
 inline void resetBuffer(uint8_t *buffer, uint32_t *bufferIndex) {
   memset(buffer, 0, MAX_MESSAGE_BLOCK_LENGTH);
-  bufferIndex = 0;
+  *bufferIndex = 0;
 }
 
 inline uint16_t calculateCRC(arpcDataFrame_t *frame) {
@@ -33,7 +33,7 @@ inline uint16_t calculateCRC(arpcDataFrame_t *frame) {
 
 inline uint8_t checkCRC(arpcDataFrame_t *frame) {
   const uint16_t calculatedCRC = calculateCRC(frame);
-  return frame->crc != calculatedCRC;
+  return frame->crc == calculatedCRC;
 }
 
 inline void arpcEncodeGeneric(arpcDataFrame_t *frame, uint8_t functionId,

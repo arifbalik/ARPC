@@ -1,9 +1,14 @@
 #include "arpc_server.h"
-#include "arpc.h"
-
+#include "arpc_generic.h"
 /* ========== ARPC Server Generic Begin ========== */
 static uint8_t buffer[MAX_MESSAGE_BLOCK_LENGTH] = {0};
 static uint32_t bufferIndex = 0;
+
+void sendString(const char *msg, uint8_t length) {
+  for (uint8_t i = 0; i < length; i++) {
+    sendByte(msg[i]);
+  }
+}
 
 void arpcReceiveFrame(arpcDataFrame_t *responseFrame, uint8_t *buffer);
 
@@ -22,7 +27,7 @@ inline void arpcReceiveFrame(arpcDataFrame_t *responseFrame, uint8_t *buffer) {
 #define OFFSET_BYTE 2
   memcpy(responseFrame->parameters, buffer + OFFSET_BYTE, parameterByteCount);
 
-//#define COPY_ALL
+#define COPY_ALL
 
 /* not neccesary to copy */
 #ifdef COPY_ALL
@@ -40,7 +45,7 @@ void processBuffer() {
 
   arpcReceiveFrame(&callFrame, buffer);
 
-  if (checkCRC(&callFrame))
+  if (!checkCRC(&callFrame))
     goto reset;
 
   arpcFrameHandler[callFrame.functionId](&callFrame, &responseFrame);
@@ -52,7 +57,8 @@ reset:
 }
 
 void arpcByteReceived(uint8_t byte) {
-  buffer[bufferIndex++] = byte;
+  buffer[bufferIndex] = byte;
+  bufferIndex++;
 
 #define FRAME_LENGTH (buffer[0])
   if (bufferIndex >= FRAME_LENGTH)
@@ -63,130 +69,230 @@ void arpcByteReceived(uint8_t byte) {
 
 /* ========== ARPC Server Generic End ========== */
 
-#define writeAnalogValue_ID 0
-extern void writeAnalogValue(uint8_t pin, uint16_t value);
+#define pinMode_ID 0
+extern void pinMode(uint8_t pin, uint8_t mode);
 
-void writeAnalogValue_generateResponseFrame(arpcDataFrame_t *callFrame, arpcDataFrame_t *responseFrame) {
-uint8_t pin;
+void pinMode_generateResponseFrame(arpcDataFrame_t *callFrame,
+                                   arpcDataFrame_t *responseFrame) {
+  uint8_t pin;
   memcpy(&pin, callFrame->parameters, sizeof(uint8_t));
-uint16_t value;
-  memcpy(&value, callFrame->parameters + sizeof(uint8_t), sizeof(uint16_t));
-writeAnalogValue(pin, value);
-
-arpcEncodeGeneric(responseFrame, writeAnalogValue_ID, NULL, 0);
-
-}
-
-
-#define readAnalogValue_ID 1
-extern uint16_t readAnalogValue(uint8_t pin);
-
-void readAnalogValue_generateResponseFrame(arpcDataFrame_t *callFrame, arpcDataFrame_t *responseFrame) {
-uint8_t pin;
-  memcpy(&pin, callFrame->parameters, sizeof(uint8_t));
-uint16_t returnValue = readAnalogValue(pin);
-
-uint8_t returnValueSerialised[sizeof(uint16_t)] = { 0 };
-memcpy(returnValueSerialised, &returnValue, sizeof(uint16_t));
-arpcEncodeGeneric(responseFrame, readAnalogValue_ID, returnValueSerialised, sizeof(returnValueSerialised));
-
-}
-
-
-#define gpioWrite_ID 2
-extern void gpioWrite(uint8_t pin, uint8_t value);
-
-void gpioWrite_generateResponseFrame(arpcDataFrame_t *callFrame, arpcDataFrame_t *responseFrame) {
-uint8_t pin;
-  memcpy(&pin, callFrame->parameters, sizeof(uint8_t));
-uint8_t value;
-  memcpy(&value, callFrame->parameters + sizeof(uint8_t), sizeof(uint8_t));
-gpioWrite(pin, value);
-
-arpcEncodeGeneric(responseFrame, gpioWrite_ID, NULL, 0);
-
-}
-
-
-#define gpioRead_ID 3
-extern uint8_t gpioRead(uint8_t pin);
-
-void gpioRead_generateResponseFrame(arpcDataFrame_t *callFrame, arpcDataFrame_t *responseFrame) {
-uint8_t pin;
-  memcpy(&pin, callFrame->parameters, sizeof(uint8_t));
-uint8_t returnValue = gpioRead(pin);
-
-uint8_t returnValueSerialised[sizeof(uint8_t)] = { 0 };
-memcpy(returnValueSerialised, &returnValue, sizeof(uint8_t));
-arpcEncodeGeneric(responseFrame, gpioRead_ID, returnValueSerialised, sizeof(returnValueSerialised));
-
-}
-
-
-#define setPinMode_ID 4
-extern void setPinMode(uint8_t pin, uint8_t mode);
-
-void setPinMode_generateResponseFrame(arpcDataFrame_t *callFrame, arpcDataFrame_t *responseFrame) {
-uint8_t pin;
-  memcpy(&pin, callFrame->parameters, sizeof(uint8_t));
-uint8_t mode;
+  uint8_t mode;
   memcpy(&mode, callFrame->parameters + sizeof(uint8_t), sizeof(uint8_t));
-setPinMode(pin, mode);
+  pinMode(pin, mode);
 
-arpcEncodeGeneric(responseFrame, setPinMode_ID, NULL, 0);
-
+  arpcEncodeGeneric(responseFrame, pinMode_ID, NULL, 0);
 }
 
+#define digitalWrite_ID 1
+extern void digitalWrite(uint8_t pin, uint8_t val);
 
-#define delayMs_ID 5
-extern void delayMs(uint16_t ms);
+void digitalWrite_generateResponseFrame(arpcDataFrame_t *callFrame,
+                                        arpcDataFrame_t *responseFrame) {
+  uint8_t pin;
+  memcpy(&pin, callFrame->parameters, sizeof(uint8_t));
+  uint8_t val;
+  memcpy(&val, callFrame->parameters + sizeof(uint8_t), sizeof(uint8_t));
+  digitalWrite(pin, val);
 
-void delayMs_generateResponseFrame(arpcDataFrame_t *callFrame, arpcDataFrame_t *responseFrame) {
-uint16_t ms;
-  memcpy(&ms, callFrame->parameters, sizeof(uint16_t));
-delayMs(ms);
-
-arpcEncodeGeneric(responseFrame, delayMs_ID, NULL, 0);
-
+  arpcEncodeGeneric(responseFrame, digitalWrite_ID, NULL, 0);
 }
 
+#define digitalRead_ID 2
+extern int32_t digitalRead(uint8_t pin);
 
-#define delayUs_ID 6
-extern void delayUs(uint16_t us);
+void digitalRead_generateResponseFrame(arpcDataFrame_t *callFrame,
+                                       arpcDataFrame_t *responseFrame) {
+  uint8_t pin;
+  memcpy(&pin, callFrame->parameters, sizeof(uint8_t));
+  int32_t returnValue = digitalRead(pin);
 
-void delayUs_generateResponseFrame(arpcDataFrame_t *callFrame, arpcDataFrame_t *responseFrame) {
-uint16_t us;
-  memcpy(&us, callFrame->parameters, sizeof(uint16_t));
-delayUs(us);
-
-arpcEncodeGeneric(responseFrame, delayUs_ID, NULL, 0);
-
+  uint8_t returnValueSerialised[sizeof(int32_t)] = {0};
+  memcpy(returnValueSerialised, &returnValue, sizeof(int32_t));
+  arpcEncodeGeneric(responseFrame, digitalRead_ID, returnValueSerialised,
+                    sizeof(returnValueSerialised));
 }
 
+#define analogRead_ID 3
+extern int32_t analogRead(uint8_t pin);
 
-#define initConsole_ID 7
-extern void initConsole(uint32_t baud);
+void analogRead_generateResponseFrame(arpcDataFrame_t *callFrame,
+                                      arpcDataFrame_t *responseFrame) {
+  uint8_t pin;
+  memcpy(&pin, callFrame->parameters, sizeof(uint8_t));
+  int32_t returnValue = analogRead(pin);
 
-void initConsole_generateResponseFrame(arpcDataFrame_t *callFrame, arpcDataFrame_t *responseFrame) {
-uint32_t baud;
-  memcpy(&baud, callFrame->parameters, sizeof(uint32_t));
-initConsole(baud);
-
-arpcEncodeGeneric(responseFrame, initConsole_ID, NULL, 0);
-
+  uint8_t returnValueSerialised[sizeof(int32_t)] = {0};
+  memcpy(returnValueSerialised, &returnValue, sizeof(int32_t));
+  arpcEncodeGeneric(responseFrame, analogRead_ID, returnValueSerialised,
+                    sizeof(returnValueSerialised));
 }
 
+#define analogReference_ID 4
+extern void analogReference(uint8_t mode);
 
-#define printToConsole_ID 8
-extern void printToConsole(uint8_t c);
+void analogReference_generateResponseFrame(arpcDataFrame_t *callFrame,
+                                           arpcDataFrame_t *responseFrame) {
+  uint8_t mode;
+  memcpy(&mode, callFrame->parameters, sizeof(uint8_t));
+  analogReference(mode);
 
-void printToConsole_generateResponseFrame(arpcDataFrame_t *callFrame, arpcDataFrame_t *responseFrame) {
-uint8_t c;
-  memcpy(&c, callFrame->parameters, sizeof(uint8_t));
-printToConsole(c);
-
-arpcEncodeGeneric(responseFrame, printToConsole_ID, NULL, 0);
-
+  arpcEncodeGeneric(responseFrame, analogReference_ID, NULL, 0);
 }
 
-void (*const arpcFrameHandler[UINT8_MAX])(arpcDataFrame_t *callFrame, arpcDataFrame_t *responseFrame) = {&writeAnalogValue_generateResponseFrame, &readAnalogValue_generateResponseFrame, &gpioWrite_generateResponseFrame, &gpioRead_generateResponseFrame, &setPinMode_generateResponseFrame, &delayMs_generateResponseFrame, &delayUs_generateResponseFrame, &initConsole_generateResponseFrame, &printToConsole_generateResponseFrame};
+#define analogWrite_ID 5
+extern void analogWrite(uint8_t pin, int32_t val);
+
+void analogWrite_generateResponseFrame(arpcDataFrame_t *callFrame,
+                                       arpcDataFrame_t *responseFrame) {
+  uint8_t pin;
+  memcpy(&pin, callFrame->parameters, sizeof(uint8_t));
+  int32_t val;
+  memcpy(&val, callFrame->parameters + sizeof(uint8_t), sizeof(int32_t));
+  analogWrite(pin, val);
+
+  arpcEncodeGeneric(responseFrame, analogWrite_ID, NULL, 0);
+}
+
+#define millis_ID 6
+extern uint32_t millis();
+
+void millis_generateResponseFrame(arpcDataFrame_t *callFrame,
+                                  arpcDataFrame_t *responseFrame) {
+  uint32_t returnValue = millis();
+
+  uint8_t returnValueSerialised[sizeof(uint32_t)] = {0};
+  memcpy(returnValueSerialised, &returnValue, sizeof(uint32_t));
+  arpcEncodeGeneric(responseFrame, millis_ID, returnValueSerialised,
+                    sizeof(returnValueSerialised));
+}
+
+#define micros_ID 7
+extern uint32_t micros();
+
+void micros_generateResponseFrame(arpcDataFrame_t *callFrame,
+                                  arpcDataFrame_t *responseFrame) {
+  uint32_t returnValue = micros();
+
+  uint8_t returnValueSerialised[sizeof(uint32_t)] = {0};
+  memcpy(returnValueSerialised, &returnValue, sizeof(uint32_t));
+  arpcEncodeGeneric(responseFrame, micros_ID, returnValueSerialised,
+                    sizeof(returnValueSerialised));
+}
+
+#define delay_ID 8
+extern void delay(uint32_t ms);
+
+void delay_generateResponseFrame(arpcDataFrame_t *callFrame,
+                                 arpcDataFrame_t *responseFrame) {
+  uint32_t ms;
+  memcpy(&ms, callFrame->parameters, sizeof(uint32_t));
+  delay(ms);
+
+  arpcEncodeGeneric(responseFrame, delay_ID, NULL, 0);
+}
+
+#define delayMicroseconds_ID 9
+extern void delayMicroseconds(uint32_t us);
+
+void delayMicroseconds_generateResponseFrame(arpcDataFrame_t *callFrame,
+                                             arpcDataFrame_t *responseFrame) {
+  uint32_t us;
+  memcpy(&us, callFrame->parameters, sizeof(uint32_t));
+  delayMicroseconds(us);
+
+  arpcEncodeGeneric(responseFrame, delayMicroseconds_ID, NULL, 0);
+}
+
+#define pulseIn_ID 10
+extern uint32_t pulseIn(uint8_t pin, uint8_t state, uint32_t timeout);
+
+void pulseIn_generateResponseFrame(arpcDataFrame_t *callFrame,
+                                   arpcDataFrame_t *responseFrame) {
+  uint8_t pin;
+  memcpy(&pin, callFrame->parameters, sizeof(uint8_t));
+  uint8_t state;
+  memcpy(&state, callFrame->parameters + sizeof(uint8_t), sizeof(uint8_t));
+  uint32_t timeout;
+  memcpy(&timeout, callFrame->parameters + sizeof(uint8_t) + sizeof(uint8_t),
+         sizeof(uint32_t));
+  uint32_t returnValue = pulseIn(pin, state, timeout);
+
+  uint8_t returnValueSerialised[sizeof(uint32_t)] = {0};
+  memcpy(returnValueSerialised, &returnValue, sizeof(uint32_t));
+  arpcEncodeGeneric(responseFrame, pulseIn_ID, returnValueSerialised,
+                    sizeof(returnValueSerialised));
+}
+
+#define pulseInLong_ID 11
+extern uint32_t pulseInLong(uint8_t pin, uint8_t state, uint32_t timeout);
+
+void pulseInLong_generateResponseFrame(arpcDataFrame_t *callFrame,
+                                       arpcDataFrame_t *responseFrame) {
+  uint8_t pin;
+  memcpy(&pin, callFrame->parameters, sizeof(uint8_t));
+  uint8_t state;
+  memcpy(&state, callFrame->parameters + sizeof(uint8_t), sizeof(uint8_t));
+  uint32_t timeout;
+  memcpy(&timeout, callFrame->parameters + sizeof(uint8_t) + sizeof(uint8_t),
+         sizeof(uint32_t));
+  uint32_t returnValue = pulseInLong(pin, state, timeout);
+
+  uint8_t returnValueSerialised[sizeof(uint32_t)] = {0};
+  memcpy(returnValueSerialised, &returnValue, sizeof(uint32_t));
+  arpcEncodeGeneric(responseFrame, pulseInLong_ID, returnValueSerialised,
+                    sizeof(returnValueSerialised));
+}
+
+#define shiftOut_ID 12
+extern void shiftOut(uint8_t dataPin, uint8_t clockPin, uint8_t bitOrder);
+
+void shiftOut_generateResponseFrame(arpcDataFrame_t *callFrame,
+                                    arpcDataFrame_t *responseFrame) {
+  uint8_t dataPin;
+  memcpy(&dataPin, callFrame->parameters, sizeof(uint8_t));
+  uint8_t clockPin;
+  memcpy(&clockPin, callFrame->parameters + sizeof(uint8_t), sizeof(uint8_t));
+  uint8_t bitOrder;
+  memcpy(&bitOrder, callFrame->parameters + sizeof(uint8_t) + sizeof(uint8_t),
+         sizeof(uint8_t));
+  shiftOut(dataPin, clockPin, bitOrder);
+
+  arpcEncodeGeneric(responseFrame, shiftOut_ID, NULL, 0);
+}
+
+#define shiftIn_ID 13
+extern uint8_t shiftIn(uint8_t dataPin, uint8_t clockPin, uint8_t bitOrder);
+
+void shiftIn_generateResponseFrame(arpcDataFrame_t *callFrame,
+                                   arpcDataFrame_t *responseFrame) {
+  uint8_t dataPin;
+  memcpy(&dataPin, callFrame->parameters, sizeof(uint8_t));
+  uint8_t clockPin;
+  memcpy(&clockPin, callFrame->parameters + sizeof(uint8_t), sizeof(uint8_t));
+  uint8_t bitOrder;
+  memcpy(&bitOrder, callFrame->parameters + sizeof(uint8_t) + sizeof(uint8_t),
+         sizeof(uint8_t));
+  uint8_t returnValue = shiftIn(dataPin, clockPin, bitOrder);
+
+  uint8_t returnValueSerialised[sizeof(uint8_t)] = {0};
+  memcpy(returnValueSerialised, &returnValue, sizeof(uint8_t));
+  arpcEncodeGeneric(responseFrame, shiftIn_ID, returnValueSerialised,
+                    sizeof(returnValueSerialised));
+}
+
+void (*const arpcFrameHandler[UINT8_MAX])(arpcDataFrame_t *callFrame,
+                                          arpcDataFrame_t *responseFrame) = {
+    &pinMode_generateResponseFrame,
+    &digitalWrite_generateResponseFrame,
+    &digitalRead_generateResponseFrame,
+    &analogRead_generateResponseFrame,
+    &analogReference_generateResponseFrame,
+    &analogWrite_generateResponseFrame,
+    &millis_generateResponseFrame,
+    &micros_generateResponseFrame,
+    &delay_generateResponseFrame,
+    &delayMicroseconds_generateResponseFrame,
+    &pulseIn_generateResponseFrame,
+    &pulseInLong_generateResponseFrame,
+    &shiftOut_generateResponseFrame,
+    &shiftIn_generateResponseFrame};

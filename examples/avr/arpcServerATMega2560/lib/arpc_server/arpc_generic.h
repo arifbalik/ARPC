@@ -7,7 +7,7 @@
 
 #define MAX_MESSAGE_BLOCK_LENGTH 255
 #define MIN_MESSAGE_BLOCK_LENGTH 5
-#define SYNC_BYTE '\n'
+#define SYNC_BYTE 10
 
 typedef struct arpcDataFrame_t {
   uint8_t length;
@@ -33,6 +33,7 @@ void arpcEncodeGeneric(arpcDataFrame_t *frame, uint8_t functionId,
 void arpcSendFrame(arpcDataFrame_t *encodedFrame);
 uint8_t checkBuffer(uint8_t *buffer, uint32_t bufferIndex);
 void resetBuffer(uint8_t *buffer, uint32_t *bufferIndex);
+uint16_t calculateCRC(arpcDataFrame_t *frame);
 uint8_t checkCRC(arpcDataFrame_t *frame);
 
 /* to be implemented by the user */

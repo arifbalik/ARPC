@@ -33,7 +33,7 @@ inline uint16_t calculateCRC(arpcDataFrame_t *frame) {
 
 inline uint8_t checkCRC(arpcDataFrame_t *frame) {
   const uint16_t calculatedCRC = calculateCRC(frame);
-  return frame->crc != calculatedCRC;
+  return frame->crc == calculatedCRC;
 }
 
 inline void arpcEncodeGeneric(arpcDataFrame_t *frame, uint8_t functionId,
