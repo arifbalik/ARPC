@@ -21,6 +21,10 @@ void arpcByteReceived(uint8_t byte);
 #define ARPC_CONSTANT(x, y)
 #endif
 
+#ifndef ARPC_STRUCT
+#define ARPC_STRUCT
+#endif
+
 #ifdef __cplusplus
 }
 #endif

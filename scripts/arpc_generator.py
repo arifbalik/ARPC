@@ -9,11 +9,15 @@ structTypes = []
 
 class ArpcStruct:
     def __init__(self, struct_string):
+        self.rawStruct = struct_string
         self.struct_string = struct_string
         self.struct_name = None
         self.variables = []
 
     def preprocess(self):
+        # Remove ARPC_STRUCT macro
+        self.rawStruct = self.struct_string = self.struct_string.replace(
+            "ARPC_STRUCT", "")
         # Remove comments
         while "/*" in self.struct_string:
             start = self.struct_string.find("/*")
@@ -60,6 +64,9 @@ class ArpcStruct:
     def get_variables(self):
         return self.variables
 
+    def getRawStruct(self):
+        return self.rawStruct
+
 
 class ArpcFunction:
     acceptedTypes = [
@@ -80,6 +87,7 @@ class ArpcFunction:
     callFrameCode = []
     responseFrameCode = []
     stubCode = []
+    structCode = []
 
     functionId = 0
 
@@ -90,6 +98,7 @@ class ArpcFunction:
         self.functionId = functionId
         self.rpcIndicator = rpcIndicator
         self.parametersUnwrapped = []
+        self.structCode = []
 
         self.parseRawDeclaration()
 
@@ -163,6 +172,7 @@ class ArpcFunction:
                         # add all members of the struct to the parameters
                         for struct in structTypes:
                             if struct.get_struct_name() == parameterType:
+                                self.structCode.append(struct.getRawStruct())
                                 self.parameters.append(
                                     (parameterType, parameterName))
                                 for variable in struct.get_variables():
@@ -278,12 +288,12 @@ class ArpcFunction:
         if hasParameters:
             offset = ''
             for parameterType, parameterName in self.parameters:
-                parameterDefine = f"{parameterType} {parameterName};\n"
-
+                parameterDefine = f"  {parameterType} {parameterName};\n"
+                self.responseFrameCode.append(parameterDefine)
+            for parameterType, parameterName in self.parametersUnwrapped:
                 parameterDeserialization = f"  memcpy(&{parameterName}, callFrame->parameters{offset}, sizeof({parameterType}));\n"
                 offset += f" + sizeof({parameterType})"
 
-                self.responseFrameCode.append(parameterDefine)
                 self.responseFrameCode.append(parameterDeserialization)
 
         parameterDeclarations = ', '.join(
@@ -384,9 +394,13 @@ class ArpcGenerator:
                              "arpc_client.c",  ''.join(function.stubCode))
 
             self.writeToFile(self.generatedPathClient +
+                             "arpc_client.h", "\n".join(function.structCode))
+            self.writeToFile(self.generatedPathClient +
                              "arpc_client.h", function.rawDeclaration)
 
             function.generateResponseFrame()
+            self.writeToFile(self.generatedPathServer +
+                             "arpc_server.c", "\n".join(function.structCode))
             self.writeToFile(self.generatedPathServer +
                              "arpc_server.c",  ''.join(function.responseFrameCode))
 
