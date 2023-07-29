@@ -1,0 +1,5 @@
+arpc_server.c:10:13:arpcReceiveFrame	24	static
+arpc_server.c:34:6:processBuffer	520	static
+arpc_server.c:54:6:arpcByteReceived	16	static
+arpc_server.c:69:6:HAL_Delay_generateResponseFrame	24	static
+arpc_server.c:81:6:setLED_generateResponseFrame	24	static

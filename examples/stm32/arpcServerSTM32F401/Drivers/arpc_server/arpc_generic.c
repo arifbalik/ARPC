@@ -28,6 +28,8 @@ inline void resetBuffer(uint8_t *buffer, uint32_t *bufferIndex) {
 inline uint16_t calculateCRC(arpcDataFrame_t *frame) {
   uint16_t crc = 0xFFFF;
 
+  frame->crc = crc;
+
   return crc;
 }
 

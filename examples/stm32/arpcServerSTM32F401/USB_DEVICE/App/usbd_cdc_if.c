@@ -269,7 +269,6 @@ static int8_t CDC_Receive_FS(uint8_t* Buf, uint32_t *Len)
 
   for(int i = 0; i < *Len; i++){
   	  		uint8_t byte = Buf[i];
-  	  		CDC_Transmit_FS(&byte, 1);
   	  		arpcByteReceived(byte);
   	  	}
 

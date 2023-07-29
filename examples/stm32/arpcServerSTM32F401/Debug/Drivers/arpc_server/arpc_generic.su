@@ -1,0 +1,6 @@
+arpc_generic.c:3:16:checkBuffer	24	static
+arpc_generic.c:23:13:resetBuffer	16	static
+arpc_generic.c:28:17:calculateCRC	24	static
+arpc_generic.c:36:16:checkCRC	24	static
+arpc_generic.c:41:13:arpcEncodeGeneric	288	static
+arpc_generic.c:63:13:arpcSendFrame	24	static

@@ -45,8 +45,6 @@ void processBuffer() {
 
   arpcFrameHandler[callFrame.functionId](&callFrame, &responseFrame);
 
-  goto reset;
-
   arpcSendFrame(&responseFrame);
 
 reset:

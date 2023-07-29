@@ -1,20 +1,20 @@
 /* USER CODE BEGIN Header */
 /**
-  ******************************************************************************
-  * @file           : main.c
-  * @brief          : Main program body
-  ******************************************************************************
-  * @attention
-  *
-  * Copyright (c) 2023 STMicroelectronics.
-  * All rights reserved.
-  *
-  * This software is licensed under terms that can be found in the LICENSE file
-  * in the root directory of this software component.
-  * If no LICENSE file comes with this software, it is provided AS-IS.
-  *
-  ******************************************************************************
-  */
+ ******************************************************************************
+ * @file           : main.c
+ * @brief          : Main program body
+ ******************************************************************************
+ * @attention
+ *
+ * Copyright (c) 2023 STMicroelectronics.
+ * All rights reserved.
+ *
+ * This software is licensed under terms that can be found in the LICENSE file
+ * in the root directory of this software component.
+ * If no LICENSE file comes with this software, it is provided AS-IS.
+ *
+ ******************************************************************************
+ */
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
@@ -24,7 +24,7 @@
 /* USER CODE BEGIN Includes */
 #include "arpc_server.h"
 
-#define USE_VCOM
+//#define USE_VCOM
 
 #ifdef USE_VCOM
 #include "usbd_cdc_if.h"
@@ -68,44 +68,48 @@ static void MX_USART1_UART_Init(void);
 RPC void HAL_Delay(uint32_t Delay);
 RPC void setLED(uint8_t value);
 
-void setLED(uint8_t value){
-	HAL_GPIO_WritePin(LED_BUILTIN_GPIO_Port, LED_BUILTIN_Pin, (GPIO_PinState)value);
+void setLED(uint8_t value) {
+  HAL_GPIO_WritePin(LED_BUILTIN_GPIO_Port, LED_BUILTIN_Pin,
+                    (GPIO_PinState)value);
+}
+
+
+void shutdown(uint8_t errorCode) {
+  __disable_irq();
+  for (;;) {
+    HAL_GPIO_TogglePin(LED_BUILTIN_GPIO_Port, LED_BUILTIN_Pin);
+    HAL_Delay(100);
+  }
 }
 
 void sendByte(uint8_t byte) {
 #ifdef USE_VCOM
-	while(CDC_Transmit_FS(&byte, 1) != USBD_OK){
-		HAL_GPIO_TogglePin(LED_BUILTIN_GPIO_Port, LED_BUILTIN_Pin);
-		      	   HAL_Delay(50);
-	}
+  while (CDC_Transmit_FS(&byte, 1) != USBD_OK) {
+
+  }
 #else
-  while(HAL_UART_Transmit(&huart1, &byte, 1, 100) != HAL_OK);
+  if (HAL_UART_Transmit(&huart1, &byte, 1, 1000) != HAL_OK){
+	  shutdown(0);
+  }
+
 #endif
 }
 
-void shutdown(uint8_t errorCode) {
-  __disable_irq();
-  for(;;){
-      	   HAL_GPIO_TogglePin(LED_BUILTIN_GPIO_Port, LED_BUILTIN_Pin);
-      	   HAL_Delay(100);
-         }
-}
-
+#ifdef USE_VCOM
 int __io_putchar(int file, char *ptr, int len) {
-    static uint8_t rc = USBD_OK;
+  static uint8_t rc = USBD_OK;
 
-    do {
-        rc = CDC_Transmit_FS(ptr, len);
-    } while (USBD_BUSY == rc);
+  do {
+    rc = CDC_Transmit_FS(ptr, len);
+  } while (USBD_BUSY == rc);
 
-    if (USBD_FAIL == rc) {
-    		shutdown(USBD_FAIL);
-        return 0;
-    }
-    return len;
+  if (USBD_FAIL == rc) {
+    shutdown(USBD_FAIL);
+    return 0;
+  }
+  return len;
 }
-
-
+#endif
 /* USER CODE END 0 */
 
 /**
@@ -147,13 +151,12 @@ int main(void)
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
 
-  while (1)
-  {
+  while (1) {
 #ifndef USE_VCOM
-	  static uint8_t byte = 0;
-	  if(HAL_UART_Receive(&huart1, &byte, 1, 100) != HAL_OK){
-		  arpcByteReceived(byte);
-	  }
+    static uint8_t byte = 0;
+    if (HAL_UART_Receive(&huart1, &byte, 1, 100) == HAL_OK) {
+      arpcByteReceived(byte);
+    }
 #endif
     /* USER CODE END WHILE */
 
@@ -283,8 +286,7 @@ void Error_Handler(void)
   /* USER CODE BEGIN Error_Handler_Debug */
   /* User can add his own implementation to report the HAL error return state */
   __disable_irq();
-  while (1)
-  {
+  while (1) {
   }
   /* USER CODE END Error_Handler_Debug */
 }
@@ -300,7 +302,8 @@ void Error_Handler(void)
 void assert_failed(uint8_t *file, uint32_t line)
 {
   /* USER CODE BEGIN 6 */
-  /* User can add his own implementation to report the file name and line number,
+  /* User can add his own implementation to report the file name and line
+     number,
      ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
   /* USER CODE END 6 */
 }
