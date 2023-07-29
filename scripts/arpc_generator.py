@@ -4,8 +4,6 @@ import shutil
 import glob
 import sys
 
-structTypes = []
-
 
 class ArpcStruct:
     def __init__(self, struct_string):
@@ -13,6 +11,8 @@ class ArpcStruct:
         self.struct_string = struct_string
         self.struct_name = None
         self.variables = []
+        self.preprocess()
+        self.parse()
 
     def preprocess(self):
         # Remove ARPC_STRUCT macro
@@ -56,7 +56,7 @@ class ArpcStruct:
                 var_name = var_parts[-1].rstrip(";")
                 self.variables.append((var_type.strip(), var_name.strip()))
         print("Parsed struct: ", self.struct_name, self.variables)
-        structTypes.append(self)
+        globalStructs.append(self)
 
     def get_struct_name(self):
         return self.struct_name
@@ -78,77 +78,70 @@ class ArpcFunction:
         "float", "double"
     ]
 
-    rawDeclaration = ""
+    rawFunctionDecleration = ""
+
     returnType = ""
     functionName = ""
     parameters = []
+
     parametersUnwrapped = []
 
-    callFrameCode = []
-    responseFrameCode = []
-    stubCode = []
-    structCode = []
+    structs: ArpcStruct = []
 
-    functionId = 0
-
-    rpcIndicator = ""
-
-    def __init__(self, rawDeclaration, functionId, rpcIndicator="RPC"):
-        self.rawDeclaration = rawDeclaration
+    def __init__(self, rawFunctionDecleration, functionId):
+        self.rawFunctionDecleration = rawFunctionDecleration
         self.functionId = functionId
-        self.rpcIndicator = rpcIndicator
         self.parametersUnwrapped = []
-        self.structCode = []
+        self.structs = []
 
-        self.parseRawDeclaration()
+        self.preprocess()
+        self.parse()
 
         print(
-            f"Generating code for function {self.__str__()} with id {self.functionId}")
+            f"Registered function {self.__str__()} with id {self.functionId}")
 
     def __str__(self):
         return f"{self.returnType} {self.functionName}({', '.join([f'{paramType} {paramName}' for paramType, paramName in self.parameters])})"
 
     def isStruct(self, parameterType):
-        for struct in structTypes:
+        for struct in globalStructs:
             if struct.get_struct_name() == parameterType:
                 return True
         return False
 
-    def checkReturnType(self):
-        if self.returnType not in self.acceptedTypes:
-            return False
-        return True
-
     def checkParameter(self, parameterType):
-        if parameterType not in self.acceptedTypes:
-            return False
-        return True
+        if self.isStruct(parameterType):
+            return True
+        if parameterType in self.acceptedTypes:
+            return True
+        return False
 
-    def parseRawDeclaration(self):
+    def preprocess(self):
         # if there is '_rpc' in the declaration, remove it
-        if self.rpcIndicator in self.rawDeclaration:
-            self.rawDeclaration = self.rawDeclaration.replace(
-                self.rpcIndicator, '')
+        if "RPC" in self.rawFunctionDecleration:
+            self.rawFunctionDecleration = self.rawFunctionDecleration.replace(
+                "RPC", '')
 
         # Remove leading and trailing whitespace
-        declaration = self.rawDeclaration.strip()
+        self.rawFunctionDecleration = self.rawFunctionDecleration.strip()
 
+    def parse(self):
         # Split the declaration by whitespace
-        parts = declaration.split()
+        parts = self.rawFunctionDecleration.split()
 
         # Extract the return type
         self.returnType = parts[0]
 
-        if not self.checkReturnType():
+        if not self.checkParameter(self.returnType):
             raise Exception(f"Invalid return type: {self.returnType}")
 
         # Extract the function name
         self.functionName = parts[1].split('(')[0]
 
         # Extract the parameter section
-        startIndex = declaration.find('(')
-        endIndex = declaration.rfind(')')
-        parameterSection = declaration[startIndex + 1: endIndex]
+        startIndex = self.rawFunctionDecleration.find('(')
+        endIndex = self.rawFunctionDecleration.rfind(')')
+        parameterSection = self.rawFunctionDecleration[startIndex + 1: endIndex]
 
         self.parameters = []
 
@@ -161,140 +154,136 @@ class ArpcFunction:
             for parameter in parametersRaw:
                 parameter = parameter.strip()
                 parameterParts = parameter.split()
-                parameterType = ' '.join(parameterParts[:-1])
+                parameterType = ' '.join(
+                    parameterParts[:-1])
+                subParameterType = parameterType
                 parameterName = parameterParts[-1]
-                print("parameter type: " + parameterType)
-                if not self.checkParameter(parameterType):
-                    if not self.isStruct(parameterType):
-                        raise Exception(
-                            f"Invalid parameter type: {parameterType}")
-                    else:
+                subParameterName = parameterName
+
+                if self.checkParameter(parameterType):
+                    if self.isStruct(parameterType):
                         # add all members of the struct to the parameters
-                        for struct in structTypes:
+                        for struct in globalStructs:
                             if struct.get_struct_name() == parameterType:
-                                self.structCode.append(struct.getRawStruct())
-                                self.parameters.append(
-                                    (parameterType, parameterName))
+                                self.structs.append(struct)
                                 for variable in struct.get_variables():
-                                    variableType, variableName = variable
-
+                                    subParameterType, subParameterName = variable
+                                    subParameterName = parameterName + "." + subParameterName
                                     self.parametersUnwrapped.append(
-                                        (variableType, parameterName + "." + variableName))
+                                        (subParameterType, subParameterName))
+                                break
 
-                else:
                     self.parameters.append((parameterType, parameterName))
                     self.parametersUnwrapped.append(
-                        (parameterType, parameterName))
+                        (subParameterType, subParameterName))
 
-    def generateCallFrame(self):
-        self.callFrameCode = []
+                else:
+                    raise Exception(
+                        f"Invalid parameter type: {parameterType}")
 
+    def generateClientCode(self):
+        clientCode_c = []
+        clientCode_h = []
+
+        # CALL FRAME
         functionIdDefine = f"\n#define {self.functionName}_ID {self.functionId}\n"
-        functionDeclaration = f"void {self.functionName}_generateCallFrame(arpcDataFrame_t *frame"
-        hasParameters = self.parameters != []
-        parameterDeclarations = hasParameters * ', ' + \
-            ', '.join([f"{paramType} {paramName}" for paramType,
-                      paramName in self.parameters]) + '){\n'
+        clientCode_c.append(functionIdDefine)
 
-        self.callFrameCode.append(functionIdDefine)
-        self.callFrameCode.append(functionDeclaration + parameterDeclarations)
+        for struct in self.structs:
+            clientCode_h.append(struct.getRawStruct())
+            clientCode_c.append(struct.getRawStruct())
+
+        functionDeclaration = f"void {self.functionName}_generateCallFrame(arpcDataFrame_t *frame,"
+        hasParameters = self.parameters != []
+        parameterDeclarations = hasParameters * ', '.join([f"{paramType} {paramName}" for paramType,
+                                                           paramName in self.parameters])
+        clientCode_c.append(functionDeclaration +
+                            parameterDeclarations + ")\n{\n")
 
         if hasParameters:
             # Calculate the size of the parameters in bytes
             parameterSizeInBytes = ' + '.join(
                 [f"sizeof({paramName})" for _, paramName in self.parameters])
-            parameterFrameDefine = f"   uint8_t parameters[{parameterSizeInBytes}] = {{ 0 }};\n"
-            self.callFrameCode.append(parameterFrameDefine)
+            parameterFrameDefine = f"uint8_t parameters[{parameterSizeInBytes}] = {{ 0 }};\n"
+            clientCode_c.append(parameterFrameDefine)
 
             offset = ''
             parameterSerializationList = []
             for _, paramName in self.parametersUnwrapped:
                 parameterSerializationList.append(
-                    f"    memcpy(parameters{offset}, &{paramName}, sizeof({paramName}));")
-                offset += f" + sizeof({paramName})"
-            self.callFrameCode.append(
+                    f"memcpy(parameters{offset}, &{paramName}, sizeof({paramName}));")
+                offset += f"+ sizeof({paramName})"
+            clientCode_c.append(
                 '\n'.join(parameterSerializationList) + '\n')
 
-            self.callFrameCode.append(
-                f"    arpcEncodeGeneric(frame, {self.functionName}_ID, parameters, sizeof(parameters));\n")
+            clientCode_c.append(
+                f"arpcEncodeGeneric(frame, {self.functionName}_ID, parameters, sizeof(parameters));\n")
         else:
-            self.callFrameCode.append(
-                f"    arpcEncodeGeneric(frame, {self.functionName}_ID, NULL, 0);\n")
+            clientCode_c.append(
+                f"arpcEncodeGeneric(frame, {self.functionName}_ID, NULL, 0);\n")
 
-        self.callFrameCode.append('}\n\n')
+        clientCode_c.append('}\n\n')
 
-        return self.callFrameCode
+        # STUB
+        functionDefinition = f"{self.returnType} {self.functionName}(" + \
+            parameterDeclarations + ')'
+        clientCode_h.append(functionDefinition + ';\n')
+        clientCode_c.append(functionDefinition + '{\n')
 
-    def generateStub(self):
-        self.stubCode = []
+        frameDefinitions = f"arpcDataFrame_t callFrame = {{ 0 }};\n"
+        frameDefinitions += f"arpcDataFrame_t responseFrame = {{ 0 }};\n\n"
+        clientCode_c.append(frameDefinitions)
 
-        functionDefinition = f"{self.returnType} {self.functionName}("
-
-        hasParameters = self.parameters != []
-        parameterDeclarations = hasParameters * \
-            ', '.join([f"{paramType} {paramName}" for paramType,
-                      paramName in self.parameters]) + '){\n'
-
-        frameDefinitions = f"  arpcDataFrame_t callFrame = {{ 0 }};\n"
-        frameDefinitions += f"  arpcDataFrame_t responseFrame = {{ 0 }};\n\n"
-
-        generateCallFrameCode = f"  {self.functionName}_generateCallFrame(&callFrame" + (
+        generateCallFrameCode = f"{self.functionName}_generateCallFrame(&callFrame" + (
             hasParameters * ', ' + ', '.join([f"{paramName}" for _, paramName in self.parameters])) + ');\n\n'
+        clientCode_c.append(generateCallFrameCode)
 
-        sendReceiveCode = f"  arpcSendReceiveFrame(&callFrame, &responseFrame);\n\n"
+        sendReceiveCode = f"arpcSendReceiveFrame(&callFrame, &responseFrame);\n\n"
+        clientCode_c.append(sendReceiveCode)
 
         returnValueDeserializationCode = ''
         returnCode = ''
         if self.returnType != 'void':
-            returnValueDefine = f"  {self.returnType} returnValue = 0;\n"
-            returnValueDeserialization = f"  memcpy(&returnValue, responseFrame.parameters, sizeof({self.returnType}));\n\n"
+            returnValueDefine = f"{self.returnType} returnValue = 0;\n"
+            returnValueDeserialization = f"memcpy(&returnValue, responseFrame.parameters, sizeof({self.returnType}));\n\n"
             returnValueDeserializationCode += returnValueDefine + returnValueDeserialization
-            returnCode = '  return returnValue;\n'
+            returnCode = 'return returnValue;\n'
+        clientCode_c.append(returnValueDeserializationCode)
+        clientCode_c.append(returnCode)
 
-        self.stubCode.append(functionDefinition + parameterDeclarations)
+        clientCode_c.append('}\n\n')
 
-        self.stubCode.append(frameDefinitions)
+        return clientCode_h, clientCode_c
 
-        self.stubCode.append(generateCallFrameCode)
+    def generateServerCode(self):
+        serverCode = []
 
-        self.stubCode.append(sendReceiveCode)
+        functionIdDefine = f"\n#define {self.functionName}_ID {self.functionId}\n"
+        serverCode.append(functionIdDefine)
 
-        self.stubCode.append(returnValueDeserializationCode)
-
-        self.stubCode.append(returnCode)
-
-        self.stubCode.append('}\n\n')
-
-    def generateResponseFrame(self):
-        self.responseFrameCode = []
+        for struct in self.structs:
+            serverCode.append(struct.getRawStruct())
 
         functionDecleration = f"extern {self.returnType} {self.functionName}("
-
         hasParameters = self.parameters != []
         parameterDeclarations = hasParameters * \
             ', '.join([f"{paramType} {paramName}" for paramType,
                       paramName in self.parameters]) + ');\n\n'
-
-        functionIdDefine = f"\n#define {self.functionName}_ID {self.functionId}\n"
-
-        self.responseFrameCode.append(functionIdDefine)
-
-        self.responseFrameCode.append(
-            functionDecleration + parameterDeclarations)
+        serverCode.append(functionDecleration + parameterDeclarations)
 
         functionDefine = f"void {self.functionName}_generateResponseFrame(arpcDataFrame_t *callFrame, arpcDataFrame_t *responseFrame) {{\n"
-        self.responseFrameCode.append(functionDefine)
+        serverCode.append(functionDefine)
 
         if hasParameters:
             offset = ''
             for parameterType, parameterName in self.parameters:
-                parameterDefine = f"  {parameterType} {parameterName};\n"
-                self.responseFrameCode.append(parameterDefine)
-            for parameterType, parameterName in self.parametersUnwrapped:
-                parameterDeserialization = f"  memcpy(&{parameterName}, callFrame->parameters{offset}, sizeof({parameterType}));\n"
-                offset += f" + sizeof({parameterType})"
+                parameterDefine = f"{parameterType} {parameterName};\n"
+                serverCode.append(parameterDefine)
 
-                self.responseFrameCode.append(parameterDeserialization)
+            for parameterType, parameterName in self.parametersUnwrapped:
+                parameterDeserialization = f"memcpy(&{parameterName}, callFrame->parameters{offset}, sizeof({parameterType}));\n"
+                offset += f"+ sizeof({parameterType})"
+                serverCode.append(parameterDeserialization)
 
         parameterDeclarations = ', '.join(
             [paramName for _, paramName in self.parameters])
@@ -302,21 +291,23 @@ class ArpcFunction:
 
         if self.returnType != 'void':
             functionCall = f"{self.returnType} returnValue = " + functionCall
+            serverCode.append(functionCall)
+
             returnValSerialisedDefine = f"uint8_t returnValueSerialised[sizeof({self.returnType})] = {{ 0 }};\n"
+            serverCode.append(returnValSerialisedDefine)
+
             returnValueSerialization = f"memcpy(returnValueSerialised, &returnValue, sizeof({self.returnType}));\n"
-
-            self.responseFrameCode.append(functionCall)
-            self.responseFrameCode.append(returnValSerialisedDefine)
-            self.responseFrameCode.append(returnValueSerialization)
-
-            self.responseFrameCode.append(
+            serverCode.append(returnValueSerialization)
+            serverCode.append(
                 f"arpcEncodeGeneric(responseFrame, {self.functionName}_ID, returnValueSerialised, sizeof(returnValueSerialised));\n\n")
         else:
-            self.responseFrameCode.append(functionCall)
-            self.responseFrameCode.append(
+            serverCode.append(functionCall)
+            serverCode.append(
                 f"arpcEncodeGeneric(responseFrame, {self.functionName}_ID, NULL, 0);\n\n")
 
-        self.responseFrameCode.append("}\n\n")
+        serverCode.append("}\n\n")
+
+        return serverCode
 
 
 class ArpcGenerator:
@@ -324,16 +315,12 @@ class ArpcGenerator:
     generatedPathClient = "arpc_client/"
     generatedPathServer = "arpc_server/"
 
-    functionPrototypes = []
-
-    constants = []
+    constantsCode = []
 
     arpcFunctions: ArpcFunction = []
-    arpcStructs: ArpcStruct = []
 
-    def __init__(self, directory, outputDirectory, rpcIndicator='RPC'):
+    def __init__(self, directory, outputDirectory):
         self.root = directory
-        self.rpcIndicator = rpcIndicator
         self.functionPrototypes = []
         self.constants = []
 
@@ -354,8 +341,6 @@ class ArpcGenerator:
         print("Looking for ARPC defines...")
 
         self.walkEveryLine()
-
-        self.createArpcFunctions()
 
         self.fillInFiles()
 
@@ -381,49 +366,30 @@ class ArpcGenerator:
 
         print("Generating files...")
 
-        self.writeToFile(self.generatedPathClient + "arpc_client.h",
-                         "\n\n" + '\n'.join(self.constants) + "\n\n")
+        self.writeToFile(self.generatedPathClient +
+                         "arpc_client.h", "\n\n" + '\n'.join(self.constantsCode))
 
         for function in self.arpcFunctions:
-            function.generateCallFrame()
-            function.generateStub()
+            client_h, client_c = function.generateClientCode()
+            server = function.generateServerCode()
 
             self.writeToFile(self.generatedPathClient +
-                             "arpc_client.c", '\n'.join(function.callFrameCode))
+                             "arpc_client.h", "\n\n" + '\n'.join(client_h))
             self.writeToFile(self.generatedPathClient +
-                             "arpc_client.c",  ''.join(function.stubCode))
-
-            self.writeToFile(self.generatedPathClient +
-                             "arpc_client.h", "\n".join(function.structCode))
-            self.writeToFile(self.generatedPathClient +
-                             "arpc_client.h", function.rawDeclaration)
-
-            function.generateResponseFrame()
+                             "arpc_client.c", '\n'.join(client_c))
             self.writeToFile(self.generatedPathServer +
-                             "arpc_server.c", "\n".join(function.structCode))
-            self.writeToFile(self.generatedPathServer +
-                             "arpc_server.c",  ''.join(function.responseFrameCode))
+                             "arpc_server.c", '\n'.join(server))
 
             responseFrameAdressList.append(
                 "&" + function.functionName + "_generateResponseFrame")
 
         responseFrameAddressesCode = "void (*const arpcFrameHandler[UINT8_MAX])(arpcDataFrame_t *callFrame, arpcDataFrame_t *responseFrame) = {" + ', '.join(
             responseFrameAdressList) + '};'
-
         self.writeToFile(self.generatedPathServer +
                          "arpc_server.c",  ''.join(responseFrameAddressesCode))
 
         self.writeToFile(self.generatedPathClient + "arpc_client.h",
                          "\n#ifdef __cplusplus\n}\n#endif\n#endif // ARPC_CLIENT_H\n")
-
-    def createArpcFunctions(self):
-        functionId = 0
-        for prototype in self.functionPrototypes:
-            self.arpcFunctions.append(ArpcFunction(
-                prototype, functionId, self.rpcIndicator))
-            functionId += 1
-            if functionId == 255:
-                raise Exception("Too many functions")
 
     def copyFilesToGeneratedFolders(self):
         filesPath = os.getcwd() + "/templates/"
@@ -466,11 +432,13 @@ class ArpcGenerator:
         # remove quotes
         constant = constant.replace("\"", "")
 
-        self.constants.append("#define " + constant)
+        self.constantsCode.append("#define " + constant)
+
+        print("Found constant: " + constant)
 
     def isRPCFunction(self, line):
         line = line.strip()
-        if line.startswith(self.rpcIndicator):
+        if line.startswith("RPC"):
             return True
         else:
             return False
@@ -483,31 +451,16 @@ class ArpcGenerator:
 
     def isRPCStruct(self, line):
         line = line.strip()
-        if (line.startswith("ARPC_STRUCT")):
+        if "ARPC_STRUCT" in line:
             return True
         else:
             return False
 
-    def extract_struct_definition(input_string):
-        # Split the input string into lines
-        lines = input_string.split("\n")
-
-        # Find the lines containing the struct definition and extract them
-        struct_lines = []
-        inside_struct = False
-        for line in lines:
-            if "struct" in line:
-                inside_struct = True
-            if inside_struct:
-                struct_lines.append(line)
-            if "}" in line and inside_struct:
-                inside_struct = False
-
-        return struct_lines
-
     def walkEveryLine(self):
         files = []
         extensions = ['*.c', '*.cc', '*.cpp', '*.h', '*.hpp']
+
+        functionId = 0
 
         os.chdir(self.root)
         for extension in extensions:
@@ -517,18 +470,14 @@ class ArpcGenerator:
         struct_lines = []
         inside_struct = False
 
-        # search all subdirs for files with the given extensions and find lines that start with the rpcIndicator and take until ')'. Function can be defined in multiple lines
+        lines = []
+
+        # search all subdirs for files with the given extensions and find lines that start with the "RPC" and take until ')'. Function can be defined in multiple lines
         for file in files:
             filepath = os.path.join(self.root, file)
             with open(filepath, 'r') as f:
                 for line in f:
-                    if self.isRPCFunction(line):
-                        prototype = line
-                        if self.functionSanityCheck(prototype):
-                            self.functionPrototypes.append(prototype)
-                        else:
-                            raise Exception(
-                                "Function prototype sanity check failed for function: " + prototype)
+                    lines.append(line)
                     if self.isRPCConstant(line):
                         self.parseConstant(line)
                     if self.isRPCStruct(line) or inside_struct:
@@ -539,21 +488,31 @@ class ArpcGenerator:
                         if "}" in line and inside_struct:
                             inside_struct = False
                         if len(struct_lines) > 0 and not inside_struct:
-                            arpcStruct = ArpcStruct(''.join(struct_lines))
-                            arpcStruct.preprocess()
-                            arpcStruct.parse()
-                            self.arpcStructs.append(arpcStruct)
+                            globalStructs.append(
+                                ArpcStruct(''.join(struct_lines)))
+        for line in lines:
+            if self.isRPCFunction(line):
+                prototype = line
+                if self.functionSanityCheck(prototype):
+                    self.arpcFunctions.append(ArpcFunction(
+                        prototype, functionId))
+                    functionId += 1
+                    if functionId == 255:
+                        raise Exception("Too many functions")
+                else:
+                    raise Exception(
+                        "Function prototype sanity check failed for function: " + prototype)
 
+
+globalStructs: ArpcStruct = []
 
 n = len(sys.argv)
 
-if n != 4:
+if n != 3:
     print("Usage: python3 arpc_generator.py <path_to_search_directory> <output_directory> <rpc_indicator>")
     sys.exit(1)
 
 searchDirectory = sys.argv[1]
 outputDirectory = sys.argv[2]
-rpcIndicator = sys.argv[3]
 
-
-ArpcGenerator = ArpcGenerator(searchDirectory, outputDirectory, rpcIndicator)
+ArpcGenerator(searchDirectory, outputDirectory)
